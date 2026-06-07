@@ -4,7 +4,7 @@ from typing import Any, final
 
 from dotenv import load_dotenv
 from nanoid import generate as generate_nanoid
-from pgvector.sqlalchemy import Vector
+from pgvector.sqlalchemy import HALFVEC, Vector
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -281,7 +281,10 @@ class MessageEmbedding(Base):
         BigInteger, Identity(), primary_key=True, autoincrement=True
     )
     content: Mapped[str] = mapped_column(TEXT)
-    embedding: MappedColumn[Any] = mapped_column(Vector(_VECTOR_DIM), nullable=True)
+    # HALFVEC (not Vector) so the column matches the live DB and supports HNSW
+    # indexing above pgvector's 2000-dim Vector limit (we run 3072-dim
+    # text-embedding-3-large). Set EMBEDDING_VECTOR_DIMENSIONS=3072 in .env.
+    embedding: MappedColumn[Any] = mapped_column(HALFVEC(_VECTOR_DIM), nullable=True)
     message_id: Mapped[str] = mapped_column(
         ForeignKey("messages.public_id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -320,7 +323,7 @@ class MessageEmbedding(Base):
             "embedding",
             postgresql_using="hnsw",
             postgresql_with={"m": 16, "ef_construction": 64},
-            postgresql_ops={"embedding": "vector_cosine_ops"},
+            postgresql_ops={"embedding": "halfvec_cosine_ops"},
         ),
         # Composite index for efficient reconciliation queries
         Index(
@@ -389,7 +392,8 @@ class Document(Base):
     times_derived: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("1")
     )
-    embedding: MappedColumn[Any] = mapped_column(Vector(_VECTOR_DIM), nullable=True)
+    # HALFVEC to match the live DB / 3072-dim embeddings (see MessageEmbedding).
+    embedding: MappedColumn[Any] = mapped_column(HALFVEC(_VECTOR_DIM), nullable=True)
     source_ids: Mapped[list[str] | None] = mapped_column(
         JSONB, nullable=True, server_default=text("NULL")
     )
@@ -455,7 +459,7 @@ class Document(Base):
             postgresql_using="hnsw",  # HNSW index type
             postgresql_with={"m": 16, "ef_construction": 64},  # HNSW parameters
             postgresql_ops={
-                "embedding": "vector_cosine_ops"
+                "embedding": "halfvec_cosine_ops"
             },  # Cosine distance operator
         ),
         # GIN index for efficient tree traversal (finding children by source IDs)

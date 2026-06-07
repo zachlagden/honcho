@@ -1,0 +1,20 @@
+# Local overrides for the self-hosted Honcho stack (Donna).
+#
+# 1. Mount config.toml into the api/deriver containers so model/provider changes
+#    apply on `docker compose up` without rebuilding the image (config is
+#    otherwise only read from the build context).
+# 2. Add host.docker.internal so the containers can reach cliproxyapi, which
+#    serves claude-haiku-4-5 on the host at LLM_ANTHROPIC_BASE_URL
+#    (http://host.docker.internal:8317).
+services:
+  api:
+    volumes:
+      - ./config.toml:/app/config.toml:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  deriver:
+    volumes:
+      - ./config.toml:/app/config.toml:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
