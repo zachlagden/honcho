@@ -52,7 +52,10 @@ class _EmbeddingClient:
                 or "https://openrouter.ai/api/v1"
             )
             self.client = AsyncOpenAI(api_key=api_key, base_url=base_url)
-            self.model = "openai/text-embedding-3-small"
+            # Must be a 3072-dim model to match VECTOR_STORE.DIMENSIONS=3072 and
+            # the HALFVEC(3072) DB columns. text-embedding-3-small is 1536 and
+            # silently breaks every embed insert with a dimension mismatch.
+            self.model = "openai/text-embedding-3-large"
             self.max_embedding_tokens = settings.MAX_EMBEDDING_TOKENS
             self.max_batch_size = 2048  # Same as OpenAI
         else:  # openai
@@ -61,7 +64,8 @@ class _EmbeddingClient:
             if not api_key:
                 raise ValueError("OpenAI API key is required")
             self.client = AsyncOpenAI(api_key=api_key)
-            self.model = "text-embedding-3-small"
+            # 3072-dim model to match VECTOR_STORE.DIMENSIONS=3072 / HALFVEC(3072).
+            self.model = "text-embedding-3-large"
             self.max_embedding_tokens = settings.MAX_EMBEDDING_TOKENS
             self.max_batch_size = 2048  # OpenAI batch limit
 

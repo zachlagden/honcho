@@ -128,7 +128,16 @@ async def is_deriver_flush_enabled() -> bool:
     try:
         import redis.asyncio as aioredis
 
-        redis_client = aioredis.from_url(settings.CACHE.URL)  # pyright: ignore[reportUnknownMemberType]
+        # Strip cashews-specific query params (e.g. ?suppress=true) that the raw
+        # redis.asyncio client does not understand and would reject with a
+        # TypeError, otherwise this whole function silently returns False and
+        # flush mode can never be enabled.
+        from urllib.parse import urlsplit, urlunsplit
+
+        parts = urlsplit(settings.CACHE.URL)
+        clean_url = urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
+
+        redis_client = aioredis.from_url(clean_url)  # pyright: ignore[reportUnknownMemberType]
         try:
             result = await redis_client.get(DERIVER_FLUSH_KEY)
             return result == b"1"

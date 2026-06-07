@@ -1778,8 +1778,18 @@ async def honcho_llm_call_inner(
             # If using response_model, parse the JSON response
             if response_model:
                 try:
-                    # Add back the opening brace that we prefilled
-                    json_content = "{" + text_content
+                    # Re-attach the opening brace we prefilled via the assistant
+                    # turn ({"role": "assistant", "content": "{"}). Real Anthropic
+                    # models honour the prefill and continue *without* repeating
+                    # the brace. Some Anthropic-compatible endpoints (e.g. MiniMax)
+                    # ignore the prefill continuation and return a complete object
+                    # that already starts with "{". Only prepend when missing so we
+                    # don't produce "{{...}" and fail to parse valid JSON.
+                    stripped_content = text_content.lstrip()
+                    if stripped_content.startswith("{"):
+                        json_content = stripped_content
+                    else:
+                        json_content = "{" + text_content
                     parsed_json = json.loads(json_content)
                     parsed_content = response_model.model_validate(parsed_json)
 
