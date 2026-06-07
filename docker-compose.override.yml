@@ -1,11 +1,26 @@
 # Local overrides for the self-hosted Honcho stack.
 #
-# The deriver is a background queue worker (`python -m src.deriver`) with no
-# HTTP server, but it inherits the API's HTTP healthcheck from the shared
-# Dockerfile (urlopen http://localhost:8000/openapi.json), so it is reported
-# "unhealthy" forever. Replace it with a process-liveness check.
+# 1. The deriver is a background queue worker (`python -m src.deriver`) with no
+#    HTTP server, but it inherits the API's HTTP healthcheck from the shared
+#    Dockerfile (urlopen http://localhost:8000/openapi.json), so it is reported
+#    "unhealthy" forever. Replace it with a process-liveness check.
+#
+# 2. Mount config.toml so model/provider config applies on restart without an
+#    image rebuild (the image bakes config at build time).
+#
+# 3. extra_hosts maps host.docker.internal -> the host gateway so containers
+#    can reach cliproxyapi (Claude/Haiku proxy) running on the host.
 services:
+  api:
+    volumes:
+      - ./config.toml:/app/config.toml
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
   deriver:
+    volumes:
+      - ./config.toml:/app/config.toml
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import os,sys; sys.exit(0 if any('src.deriver' in open('/proc/%s/cmdline'%p,'rb').read().decode('utf-8','ignore') for p in os.listdir('/proc') if p.isdigit() and os.path.isfile('/proc/%s/cmdline'%p)) else 1)\""]
       interval: 30s
