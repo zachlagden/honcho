@@ -244,6 +244,18 @@ MAX_WORKSPACE_LIMIT = 10
 ENABLED = false
 # NAMESPACE = "honcho"  # Inherits from app.NAMESPACE if not set
 
+# Secret detection / redaction. Strips API keys and credentials from message
+# content so this memory store never persists live secrets.
+[security]
+# Redact secrets from message content before it is stored or embedded (primary defence)
+REDACT_SECRETS_ON_INGEST = true
+# Redact secrets in the deriver before building the LLM prompt (defence in depth,
+# also covers rows that predate ingest redaction)
+REDACT_SECRETS_IN_DERIVER = true
+# Log (WARNING) when a secret is redacted — logs hit types only, never the secret
+LOG_SECRET_DETECTIONS = true
+
+
 # CloudEvents telemetry settings (analytics events)
 [telemetry]
 ENABLED = false

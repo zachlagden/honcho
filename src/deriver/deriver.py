@@ -22,6 +22,7 @@ from src.telemetry.sentry import with_sentry_transaction
 from src.utils.config_helpers import get_configuration
 from src.utils.formatting import format_new_turn_with_timestamp
 from src.utils.representation import PromptRepresentation, Representation
+from src.utils.secrets import scrub_text
 from src.utils.tokens import track_deriver_input_tokens
 
 from .prompts import estimate_deriver_prompt_tokens, minimal_deriver_prompt
@@ -101,9 +102,29 @@ async def process_representation_tasks_batch(
         "id",
     )
 
-    # Format messages with timestamps
+    # Format messages with timestamps. Scrub secrets defensively first: even if
+    # a credential slipped past ingest redaction (e.g. a row predating this
+    # feature, or ingest redaction disabled), it must never reach the LLM or be
+    # turned into a stored observation.
+    def _safe_content(msg: Message) -> str:
+        if not settings.SECURITY.REDACT_SECRETS_IN_DERIVER:
+            return msg.content
+        scrubbed = scrub_text(msg.content)
+        if scrubbed.found and settings.SECURITY.LOG_SECRET_DETECTIONS:
+            logger.warning(
+                "Deriver redacted secret(s) before derivation "
+                "(workspace=%s message_id=%s observed=%s types=%s)",
+                msg.workspace_name,
+                msg.id,
+                observed,
+                ", ".join(scrubbed.hit_types),
+            )
+        return scrubbed.text
+
     formatted_messages = "\n".join(
-        format_new_turn_with_timestamp(msg.content, msg.created_at, msg.peer_name)
+        format_new_turn_with_timestamp(
+            _safe_content(msg), msg.created_at, msg.peer_name
+        )
         for msg in messages
     )
 

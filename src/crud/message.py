@@ -15,6 +15,7 @@ from src.exceptions import VectorStoreError
 from src.telemetry.events import EmbeddingCallPurpose
 from src.utils.filter import apply_filter
 from src.utils.formatting import ILIKE_ESCAPE_CHAR, escape_ilike_pattern
+from src.utils.secrets import scrub_text
 from src.utils.types import embedding_call_purpose
 from src.vector_store import VectorRecord, get_external_vector_store
 
@@ -261,10 +262,29 @@ async def create_messages(
     message_objects: list[models.Message] = []
     for offset, message in enumerate(messages, start=1):
         message_seq_in_session = last_seq + offset
+
+        # Redact any secrets before the content is persisted or embedded.
+        # This is the primary defence: nothing with a live credential should
+        # ever land in the messages table or the vector store.
+        content = message.content
+        if settings.SECURITY.REDACT_SECRETS_ON_INGEST:
+            scrubbed = scrub_text(content)
+            if scrubbed.found:
+                content = scrubbed.text
+                if settings.SECURITY.LOG_SECRET_DETECTIONS:
+                    logger.warning(
+                        "Redacted secret(s) from message on ingest "
+                        "(workspace=%s session=%s peer=%s types=%s)",
+                        workspace_name,
+                        session_name,
+                        message.peer_name,
+                        ", ".join(scrubbed.hit_types),
+                    )
+
         message_obj = models.Message(
             session_name=session_name,
             peer_name=message.peer_name,
-            content=message.content,
+            content=content,
             h_metadata=message.metadata or {},
             workspace_name=workspace_name,
             public_id=generate_nanoid(),

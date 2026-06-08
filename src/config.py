@@ -538,6 +538,7 @@ class TomlConfigSettingsSource(PydanticBaseSettingsSource):
         "DREAM": "dream",
         "VECTOR_STORE": "vector_store",
         "METRICS": "metrics",
+        "SECURITY": "security",
         "TELEMETRY": "telemetry",
         "": "app",  # For AppSettings with no prefix
     }
@@ -1070,6 +1071,26 @@ class MetricsSettings(HonchoSettings):
     NAMESPACE: str | None = None
 
 
+class SecuritySettings(HonchoSettings):
+    """Secret detection / redaction on the ingest and derive paths."""
+
+    model_config = SettingsConfigDict(env_prefix="SECURITY_", extra="ignore")  # pyright: ignore
+
+    # Redact detected secrets from message content before it is stored
+    # (messages table + embeddings). On by default — this is a memory store,
+    # it should never persist live credentials.
+    REDACT_SECRETS_ON_INGEST: bool = True
+
+    # Defence in depth: the deriver scrubs message content before building its
+    # prompt, so even pre-existing secret-bearing rows never reach the LLM or
+    # get turned into observations.
+    REDACT_SECRETS_IN_DERIVER: bool = True
+
+    # Log (at WARNING) when a secret is detected and redacted. Logs hit types
+    # only (e.g. "github, openai"), never the secret material itself.
+    LOG_SECRET_DETECTIONS: bool = True
+
+
 class TelemetrySettings(HonchoSettings):
     """CloudEvents telemetry settings for analytics.
 
@@ -1323,6 +1344,7 @@ class AppSettings(HonchoSettings):
     SUMMARY: SummarySettings = Field(default_factory=SummarySettings)
     WEBHOOK: WebhookSettings = Field(default_factory=WebhookSettings)
     METRICS: MetricsSettings = Field(default_factory=MetricsSettings)
+    SECURITY: SecuritySettings = Field(default_factory=SecuritySettings)
     TELEMETRY: TelemetrySettings = Field(default_factory=TelemetrySettings)
     CACHE: CacheSettings = Field(default_factory=CacheSettings)
     DREAM: DreamSettings = Field(default_factory=DreamSettings)
